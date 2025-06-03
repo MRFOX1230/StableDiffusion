@@ -4,11 +4,15 @@ from torch.nn import functional as F
 import math
 import numpy as np
 from tqdm import tqdm
-from torch.utils.data import DataLoader
 import random
 
 from ddpm_trainsimplemodel import SelfAttention, CrossAttention
 from ddpm import DDPM
+
+import os
+from PIL import Image
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
 
 num_channels = 64
@@ -323,7 +327,6 @@ def get_time_embedding(timestep):
 WIDTH = 64
 HEIGHT = 64
 def generate(
-    input_image=None,
     n_inference_steps=50,
     seed=42,
     batch_size=1,
@@ -347,16 +350,8 @@ def generate(
         scheduler.set_inference_timesteps(n_inference_steps)
 
         latents_shape = (1, 3, HEIGHT, WIDTH)
-        if input_image:
-            input_image_tensor = input_image.resize((WIDTH, HEIGHT))
-            input_image_tensor = np.array(input_image_tensor)
-            input_image_tensor = torch.tensor(input_image_tensor, dtype=torch.float32, device=device)
-            input_image_tensor = rescale(input_image_tensor, (0, 255), (-1, 1))
-            input_image_tensor = input_image_tensor.unsqueeze(0)
-            input_image_tensor = input_image_tensor.permute(0, 3, 1, 2)
-            latents = input_image_tensor
-        else:
-            latents = torch.randn(latents_shape, generator=generator, device=device)
+
+        latents = torch.randn(latents_shape, generator=generator, device=device)
 
         timesteps = tqdm(scheduler.timesteps)
         for i, timestep in enumerate(timesteps):
@@ -389,3 +384,24 @@ def rescale(x, old_range, new_range, clamp=False):
     if clamp:
         x = x.clamp(new_min, new_max)
     return x
+
+def generate_noise(
+    seed=42,
+    device="cuda"
+):
+        # Инициализация генератора случайных чисел в соответствии с указанным начальным числом
+        generator = torch.Generator(device=device)
+        if seed is None:
+            generator.seed()
+        else:
+            generator.manual_seed(seed)
+
+        latents_shape = (1, 3, HEIGHT, WIDTH)
+        latents = torch.randn(latents_shape, generator=generator, device=device)
+
+        images = latents
+
+        images = rescale(images, (-1, 1), (0, 255), clamp=True)
+        images = images.permute(0, 2, 3, 1)
+        images = images.to("cpu", torch.uint8).numpy()
+        return images[0]
